@@ -1,8 +1,10 @@
 # Redis Dump Tool
-## Tool for cloning redis cluster keys with TTL
+## Live redis cluster dump of all keys with TTL with live sync support
 
-Full cluster dump with TTL support and pub/sub for real-time sync. Dump process is running in parallel threads for faster sync.
+Full cluster dump with key's TTL and pub/sub support for real-time sync. Dump process is running in parallel threads for faster sync.
 As well as Live sync using pub/sub for real-time sync while dump is running to keep the target redis in sync with source.
+
+Useful for live migrations from one redis cluster to another without downtime. 
 
 ### Installation
 1. Clone the repository and have Rust installed (1.80 or later)
