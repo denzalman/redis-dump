@@ -1,7 +1,8 @@
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use redis::{Client, RedisResult, Connection};
 use std::error::Error;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, mpsc, Mutex};
+use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
 
@@ -58,7 +59,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut handles = vec![];
 
-    let sync_updates_handle = thread::spawn({
         let source_client = Arc::clone(&source_client);
         let target_client = Arc::clone(&target_client);
         let multi_progress = Arc::clone(&multi_progress);
@@ -68,22 +68,97 @@ fn main() -> Result<(), Box<dyn Error>> {
             ProgressStyle::with_template("{spinner:.green} Synced: {pos:>7} | {msg}")
                 .unwrap()
                 .progress_chars("##-"));
-        move || {
-            let result = sync_updates_handle(
-                source_client,
-                target_client,
-                sync_progress,
-                sync_errors.clone(),
-                &sync_db,
-                &sync_key
-            );
-            if let Err(e) = result {
-                sync_errors.set_message(format!("Sync process error: {}", e));
-            }
-        }
-    });
 
-    handles.push(sync_updates_handle);
+
+        let (tx, rx) = mpsc::channel();
+        let tx: Sender<(String, String)> = tx.clone();
+        let rx = std::sync::Arc::new(std::sync::Mutex::new(rx));
+
+        for _ in 0..20 {
+            let source_client = source_client.clone();
+            let target_client = target_client.clone();
+            let sync_progress = sync_progress.clone();
+            let sync_errors = sync_errors.clone();
+            let thread_rx = rx.clone();
+
+            let handle = thread::spawn(move || {
+                let mut source_conn = source_client.get_connection().unwrap();
+                let mut target_conn = target_client.get_connection().unwrap();
+
+                loop {
+                    let (key, event) = {
+                        let rx = thread_rx.lock().unwrap();
+                        rx.recv().unwrap()
+                    };
+
+                    let _ = dump_key(
+                        &mut source_conn,
+                        &mut target_conn,
+                        &key,
+                        sync_progress.clone(),
+                        sync_errors.clone(),
+                        &event
+                    );
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Main loop to receive messages and send to worker threads
+        let handle = thread::spawn({
+            let source_client = source_client.clone();
+            let sync_db = Arc::new(sync_db.clone());
+            let sync_key = Arc::new(sync_key.clone());
+            move || {
+                let mut pubsub_conn = source_client.get_connection().unwrap();
+                let pchannel = format!("__keyspace@{sync_db}__:{sync_key}");
+                let mut pubsub = pubsub_conn.as_pubsub();
+                pubsub.psubscribe(pchannel).unwrap();
+                loop {
+                    let msg = pubsub.get_message().unwrap();
+                    let channel: String = msg.get_channel().unwrap();
+                    let event: String = msg.get_payload().unwrap();
+                    // Extract key from channel
+                    let key = channel.split("__:").last().unwrap_or("").to_string();
+
+                    // Send the key and event to a worker thread
+                    tx.send((key, event)).unwrap();
+                }
+                drop(tx);
+            }
+        });
+
+        handles.push(handle);
+
+
+
+
+    // let sync_updates_handle = thread::spawn({
+    //     let source_client = Arc::clone(&source_client);
+    //     let target_client = Arc::clone(&target_client);
+    //     let multi_progress = Arc::clone(&multi_progress);
+    //     let sync_progress = multi_progress.add(ProgressBar::new_spinner());
+    //     sync_progress.set_message("Live sync progress");
+    //     sync_progress.set_style(
+    //         ProgressStyle::with_template("{spinner:.green} Synced: {pos:>7} | {msg}")
+    //             .unwrap()
+    //             .progress_chars("##-"));
+    //     move || {
+    //         let result = sync_updates_handle(
+    //             source_client,
+    //             target_client,
+    //             sync_progress,
+    //             sync_errors.clone(),
+    //             &sync_db,
+    //             &sync_key
+    //         );
+    //         if let Err(e) = result {
+    //             sync_errors.set_message(format!("Sync process error: {}", e));
+    //         }
+    //     }
+    // });
+    //
+    // handles.push(sync_updates_handle);
 
     for i in 0..num_threads {
         let source_client = Arc::clone(&source_client);
@@ -224,7 +299,7 @@ fn dump_key(
         // If the key exists, DUMP it from the source
         let dump: Vec<u8> = redis::cmd("DUMP").arg(key).query(source_conn)?;
         // Get the TTL
-        let ttl: i64 = redis::cmd("PTTL").arg(key).query(source_conn)?;
+        let ttl: i64 = redis::cmd("PTTL").arg(key).query(source_conn).unwrap_or(0);
         // RESTORE in the target
         let restore_result: RedisResult<String> = redis::cmd("RESTORE")
             .arg(key)
