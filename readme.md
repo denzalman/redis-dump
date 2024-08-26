@@ -20,7 +20,7 @@ threads = 20 # Number of threads to run in parallel for copy, default is 10
 sync_db = "*" # Database to sync, default is "*"
 sync_key = "*" # Key pattern to sync, default is "*"
 ```
-3. Run `cargo run` to start the sync process
+3. Run `cargo run --bin rd` to start the sync process
 
 ### Build and Run
 if you need to build and run/distribute the tool as binary, you can use the following commands:

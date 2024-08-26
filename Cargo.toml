@@ -1,14 +1,6 @@
-[package]
-name = "redis-dump"
-version = "0.1.0"
-edition = "2021"
+[ workspace ]
 
-[[bin]]
-name = "rd"
-path = "src/main.rs"
-
-[dependencies]
-redis = "0.26.0"
-indicatif = "0.17.8"
-tokio = "1.39.2"
-toml = "0.8.19"
+members = [
+    "rd-async",
+    "rd-sync",
+]

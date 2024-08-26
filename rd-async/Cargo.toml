@@ -1,0 +1,14 @@
+[package]
+name = "rd-async"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "rd-async"
+path = "src/async.rs"
+
+[dependencies]
+redis = { version = "0.26.1", features = ["tokio-comp", "aio"] }
+indicatif = "0.17.8"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8.19"

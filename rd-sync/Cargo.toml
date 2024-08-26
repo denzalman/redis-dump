@@ -1,0 +1,13 @@
+[package]
+name = "rd"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "rd"
+path = "src/main.rs"
+
+[dependencies]
+redis = "0.26.1"
+indicatif = "0.17.8"
+toml = "0.8.19"

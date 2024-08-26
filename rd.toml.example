@@ -1,0 +1,12 @@
+# Required configurations
+# Required configurations
+
+source = "redis://localhost:6378"
+target = "redis://localhost:6379"
+
+# Optional configurations
+batch = 120 # Number of keys to move in a single batch, default is 100
+threads = 100 # Number of threads to run in parallel for copy, default is 10
+sync_threads = 100 # Number of threads to run in parallel for sync, default is 20
+sync_db = "*" # Database to sync, default is "*"
+sync_key = "*" # Key pattern to sync, default is "*"
